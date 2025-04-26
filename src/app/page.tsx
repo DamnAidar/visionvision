@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -9,106 +10,101 @@ import {
   SidebarFooter,
   SidebarTrigger,
   SidebarInset,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
   SidebarGroup,
   SidebarGroupLabel,
   SidebarGroupContent,
-  SidebarSeparator,
 } from '@/components/ui/sidebar';
 import { Toaster } from '@/components/ui/toaster';
+import { useToast } from '@/hooks/use-toast';
 import { VideoStreamPlayer } from '@/components/vision-stream/video-stream-player';
 import { ObjectDetectionControls } from '@/components/vision-stream/object-detection-controls';
-import { useSimulatedStream } from '@/hooks/use-simulated-stream';
-import { summarizeObjects } from '@/ai/flows/summarize-objects';
-import { suggestDetectionFilters } from '@/ai/flows/suggest-detection-filters';
-import type { Detection } from '@/types/detection';
-import { LoaderCircle, AlertTriangle } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+// import { useSimulatedStream } from '@/hooks/use-simulated-stream'; // Removed simulation
+// import { summarizeObjects } from '@/ai/flows/summarize-objects'; // Removed AI features
+// import { suggestDetectionFilters } from '@/ai/flows/suggest-detection-filters'; // Removed AI features
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { Camera, AlertTriangle, Video } from 'lucide-react';
 
 export default function VisionStreamPage() {
-  const { frame, detections, isLoading, error, availableClasses } = useSimulatedStream();
+  // const { frame, detections, isLoading, error, availableClasses } = useSimulatedStream(); // Removed simulation
+  const videoRef = React.useRef<HTMLVideoElement>(null);
+  const [hasCameraPermission, setHasCameraPermission] = React.useState<boolean | undefined>(undefined);
+  const [isStreamLoading, setIsStreamLoading] = React.useState(true);
+  const { toast } = useToast();
+
+  // State for controls - keep simple for now
   const [filteredClasses, setFilteredClasses] = React.useState<string[]>([]);
-  const [summary, setSummary] = React.useState<string | null>(null);
-  const [suggestedFilters, setSuggestedFilters] = React.useState<string[]>([]);
-  const [isSummaryLoading, setIsSummaryLoading] = React.useState(false);
-  const [isSuggestionLoading, setIsSuggestionLoading] = React.useState(false);
-  const [aiError, setAiError] = React.useState<string | null>(null);
+  const availableClasses = ["person", "car", "bicycle", "dog", "cat", "traffic light", "backpack", "handbag"]; // Example classes, detection not implemented yet
 
-  // Filter detections based on selected classes
-  const filteredDetections = React.useMemo(() => {
-    if (filteredClasses.length === 0) {
-      return detections; // Show all if no filter applied
-    }
-    return detections.filter(d => filteredClasses.includes(d.label));
-  }, [detections, filteredClasses]);
-
-  // Effect to generate summary when detections change
   React.useEffect(() => {
-    if (detections.length > 0) {
-      const fetchSummary = async () => {
-        setIsSummaryLoading(true);
-        setAiError(null);
-        try {
-          const result = await summarizeObjects({
-            objectList: detections.map(d => d.label),
-            timestamp: Date.now(),
-          });
-          setSummary(result.summary);
-        } catch (err) {
-          console.error("Error fetching summary:", err);
-          setSummary("Could not generate summary.");
-          setAiError("Failed to generate summary. Please check the AI service.");
-        } finally {
-          setIsSummaryLoading(false);
-        }
-      };
-      fetchSummary();
-    } else {
-      setSummary(null); // Clear summary if no detections
-    }
-  }, [detections]);
+    const getCameraPermission = async () => {
+      setIsStreamLoading(true);
+      setHasCameraPermission(undefined); // Reset while checking
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        setHasCameraPermission(true);
 
-  // Effect to generate filter suggestions when detections change
-  React.useEffect(() => {
-    if (detections.length > 0) {
-      const fetchSuggestions = async () => {
-        setIsSuggestionLoading(true);
-        setAiError(null);
-        try {
-          const result = await suggestDetectionFilters({
-            detectedObjects: detections.map(d => d.label),
-          });
-          setSuggestedFilters(result.suggestedFilters);
-        } catch (err) {
-          console.error("Error fetching suggestions:", err);
-          setSuggestedFilters([]);
-           setAiError("Failed to generate suggestions. Please check the AI service.");
-        } finally {
-          setIsSuggestionLoading(false);
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          videoRef.current.onloadedmetadata = () => {
+             setIsStreamLoading(false); // Stop loading once video metadata is loaded
+             videoRef.current?.play().catch(playError => {
+                console.error("Error trying to play video:", playError);
+                // Attempt to play might fail due to autoplay policies, user interaction might be needed
+                 toast({
+                  variant: 'destructive',
+                  title: 'Playback Error',
+                  description: 'Could not automatically play the video stream.',
+                });
+             });
+          };
+        } else {
+            // If videoRef is not ready yet, stop the stream to avoid leaks
+            stream.getTracks().forEach(track => track.stop());
+            throw new Error("Video element not ready.");
         }
-      };
-      fetchSuggestions();
-    } else {
-      setSuggestedFilters([]); // Clear suggestions if no detections
+      } catch (error) {
+        console.error('Error accessing camera:', error);
+        setHasCameraPermission(false);
+        setIsStreamLoading(false); // Stop loading on error
+        toast({
+          variant: 'destructive',
+          title: 'Camera Access Denied',
+          description: 'Please enable camera permissions in your browser settings.',
+        });
+      }
+    };
+
+    getCameraPermission();
+
+    // Cleanup function to stop the stream when component unmounts
+    return () => {
+        if (videoRef.current && videoRef.current.srcObject) {
+            const stream = videoRef.current.srcObject as MediaStream;
+            stream.getTracks().forEach(track => track.stop());
+            videoRef.current.srcObject = null;
+        }
     }
-  }, [detections]);
+  }, [toast]);
 
 
   const handleFilterChange = (selected: string[]) => {
+    // Filtering logic will need to be adapted when real detection is added
     setFilteredClasses(selected);
+    console.log("Filters changed (detection not implemented yet):", selected);
   };
 
   return (
     <SidebarProvider defaultOpen>
       <Sidebar variant="sidebar" collapsible="icon">
         <SidebarHeader className="p-4">
-          <h1 className="text-xl font-semibold text-sidebar-foreground group-data-[collapsible=icon]:hidden">
-            VisionStream
-          </h1>
-           <div className="text-sm text-sidebar-foreground/80 group-data-[collapsible=icon]:hidden">
-             Real-time Object Detection
+            <div className="flex items-center gap-2 group-data-[collapsible=icon]:justify-center">
+                 <Camera className="text-sidebar-foreground" />
+                 <h1 className="text-xl font-semibold text-sidebar-foreground group-data-[collapsible=icon]:hidden">
+                    VisionStream
+                 </h1>
+            </div>
+           <div className="text-sm text-sidebar-foreground/80 group-data-[collapsible=icon]:hidden pl-8">
+             Live Camera Feed
            </div>
         </SidebarHeader>
         <SidebarContent>
@@ -116,20 +112,21 @@ export default function VisionStreamPage() {
              <SidebarGroupLabel>Controls</SidebarGroupLabel>
              <SidebarGroupContent>
                <ObjectDetectionControls
-                 availableClasses={availableClasses}
+                 availableClasses={availableClasses} // Using example classes for now
                  selectedClasses={filteredClasses}
                  onFilterChange={handleFilterChange}
-                 summary={summary}
-                 suggestedFilters={suggestedFilters}
-                 isSummaryLoading={isSummaryLoading}
-                 isSuggestionLoading={isSuggestionLoading}
-                 aiError={aiError}
+                 // Removed AI props
+                 // summary={null}
+                 // suggestedFilters={[]}
+                 // isSummaryLoading={false}
+                 // isSuggestionLoading={false}
+                 // aiError={null}
                />
             </SidebarGroupContent>
           </SidebarGroup>
         </SidebarContent>
         <SidebarFooter className="p-4 text-sidebar-foreground/70 text-xs group-data-[collapsible=icon]:hidden">
-          Powered by Next.js & Genkit
+          Using Live Camera Input
         </SidebarFooter>
       </Sidebar>
 
@@ -139,11 +136,30 @@ export default function VisionStreamPage() {
              <SidebarTrigger className="md:hidden" />
              <h2 className="text-2xl font-semibold">Live Feed</h2>
            </div>
-           {isLoading && <LoaderCircle className="animate-spin text-primary" />}
-           {error && <AlertTriangle className="text-destructive" />}
+            {hasCameraPermission === false && <AlertTriangle className="text-destructive" />}
         </header>
-        <div className="flex-grow flex items-center justify-center bg-secondary rounded-lg shadow-inner overflow-hidden">
-          <VideoStreamPlayer frame={frame} detections={filteredDetections} isLoading={isLoading} error={error} />
+
+         {/* Always render video container to attach ref */}
+        <div className="flex-grow flex flex-col items-center justify-center bg-secondary rounded-lg shadow-inner overflow-hidden p-1">
+            <VideoStreamPlayer videoRef={videoRef} isLoading={isStreamLoading} hasPermission={hasCameraPermission} />
+            {hasCameraPermission === false && (
+                 <Alert variant="destructive" className="mt-4 w-full max-w-md">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>Camera Access Required</AlertTitle>
+                  <AlertDescription>
+                    Camera access was denied or is unavailable. Please check your browser settings and ensure a camera is connected.
+                  </AlertDescription>
+                </Alert>
+            )}
+             {hasCameraPermission === undefined && !isStreamLoading && ( // Case where permission check might be stuck/pending without loading state
+                 <Alert className="mt-4 w-full max-w-md">
+                   <Video className="h-4 w-4" />
+                  <AlertTitle>Checking Camera Access</AlertTitle>
+                  <AlertDescription>
+                    Attempting to access your camera...
+                  </AlertDescription>
+                </Alert>
+            )}
         </div>
       </SidebarInset>
       <Toaster />

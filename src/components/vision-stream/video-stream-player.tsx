@@ -1,149 +1,83 @@
+
 'use client';
 
 import * as React from 'react';
-import Image from 'next/image';
-import type { Frame } from '@/services/video-stream';
-import type { Detection } from '@/types/detection';
+// import Image from 'next/image'; // No longer using Image
+// import type { Frame } from '@/services/video-stream'; // No longer using Frame type
+// import type { Detection } from '@/types/detection'; // No longer using Detection type
 import { Card, CardContent } from '@/components/ui/card';
-import { LoaderCircle, VideoOff, AlertTriangle } from 'lucide-react';
+import { LoaderCircle, VideoOff, CameraOff } from 'lucide-react';
 
 interface VideoStreamPlayerProps {
-  frame: Frame | null;
-  detections: Detection[];
+  videoRef: React.RefObject<HTMLVideoElement>;
   isLoading: boolean;
-  error: string | null;
+  hasPermission: boolean | undefined;
+  // Detections are removed as they were tied to simulation
+  // frame: Frame | null;
+  // detections: Detection[];
+  // error: string | null; // Error handling moved to parent page
 }
 
-export function VideoStreamPlayer({ frame, detections, isLoading, error }: VideoStreamPlayerProps) {
-  const [imageUrl, setImageUrl] = React.useState<string | null>(null);
-  const containerRef = React.useRef<HTMLDivElement>(null);
-  const [containerSize, setContainerSize] = React.useState<{ width: number; height: number } | null>(null);
-
-  React.useEffect(() => {
-    if (frame?.data) {
-      const blob = new Blob([frame.data], { type: 'image/jpeg' }); // Assuming JPEG frames
-      const url = URL.createObjectURL(blob);
-      setImageUrl(url);
-
-      // Clean up the previous object URL when a new frame arrives
-      return () => {
-        if (imageUrl) {
-          URL.revokeObjectURL(imageUrl);
-        }
-      };
-    } else {
-      // Clear image if frame is null
-       if (imageUrl) {
-          URL.revokeObjectURL(imageUrl);
-        }
-      setImageUrl(null);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [frame]); // Only re-run when the frame data changes
-
-  // Update container size for scaling bounding boxes
-    React.useEffect(() => {
-        const resizeObserver = new ResizeObserver(entries => {
-        if (entries[0]) {
-            const { width, height } = entries[0].contentRect;
-            setContainerSize({ width, height });
-        }
-        });
-
-        if (containerRef.current) {
-        resizeObserver.observe(containerRef.current);
-        }
-
-        return () => {
-        if (containerRef.current) {
-            // eslint-disable-next-line react-hooks/exhaustive-deps
-            resizeObserver.unobserve(containerRef.current);
-        }
-        };
-    }, []);
-
+export function VideoStreamPlayer({ videoRef, isLoading, hasPermission }: VideoStreamPlayerProps) {
 
   const renderContent = () => {
     if (isLoading) {
       return (
         <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
           <LoaderCircle className="w-12 h-12 animate-spin mb-2 text-primary" />
-          <p>Loading video stream...</p>
+          <p>Connecting to camera...</p>
         </div>
       );
     }
 
-    if (error) {
-      return (
-        <div className="flex flex-col items-center justify-center h-full text-destructive">
-          <AlertTriangle className="w-12 h-12 mb-2" />
-          <p>Error loading stream:</p>
-           <p className="text-sm">{error}</p>
-        </div>
-      );
-    }
-
-    if (!imageUrl) {
+    if (hasPermission === false) {
+        // Parent component shows detailed alert, this is just placeholder content
       return (
         <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-          <VideoOff className="w-12 h-12 mb-2" />
-          <p>Video stream unavailable or paused.</p>
+          <CameraOff className="w-12 h-12 mb-2" />
+          <p>Camera access denied.</p>
         </div>
       );
     }
 
-    // Get natural dimensions of the image for scaling
-    let naturalWidth = 640; // Default/fallback width
-    let naturalHeight = 480; // Default/fallback height
-    // In a real scenario, you'd get these from the image element once loaded.
-    // For simulation, we'll use common webcam dimensions.
+     if (hasPermission === undefined) {
+       // Waiting for permission result, show loading or placeholder
+        return (
+         <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+           <LoaderCircle className="w-12 h-12 animate-spin mb-2 text-primary" />
+           <p>Checking permissions...</p>
+         </div>
+       );
+     }
 
-    const scaleX = containerSize ? containerSize.width / naturalWidth : 1;
-    const scaleY = containerSize ? containerSize.height / naturalHeight : 1;
+    // If permission is granted, the video tag below will be used.
+    // We don't return anything here explicitly, letting the video tag render.
+    // Add a fallback message in case the stream fails silently after permission.
+     if (hasPermission === true && videoRef.current && !videoRef.current.srcObject && !isLoading) {
+        return (
+             <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                 <VideoOff className="w-12 h-12 mb-2" />
+                 <p>Video stream not available.</p>
+             </div>
+         );
+     }
 
-
-    return (
-       <div ref={containerRef} className="relative w-full h-full">
-        <Image
-            src={imageUrl}
-            alt="Live video stream"
-            layout="fill"
-            objectFit="contain" // Use contain to preserve aspect ratio
-            priority // Load faster as it's the main content
-        />
-        {/* Render bounding boxes */}
-        {detections.map((detection, index) => {
-            const { xmin, ymin, xmax, ymax, confidence, label } = detection.bbox;
-            const scaledXMin = xmin * scaleX;
-            const scaledYMin = ymin * scaleY;
-            const scaledWidth = (xmax - xmin) * scaleX;
-            const scaledHeight = (ymax - ymin) * scaleY;
-
-            return (
-            <div
-                key={index}
-                className="absolute border-2 border-accent rounded shadow"
-                style={{
-                left: `${scaledXMin}px`,
-                top: `${scaledYMin}px`,
-                width: `${scaledWidth}px`,
-                height: `${scaledHeight}px`,
-                }}
-            >
-                <span className="absolute -top-5 left-0 bg-accent text-accent-foreground text-xs px-1 py-0.5 rounded-sm whitespace-nowrap">
-                {label} ({Math.round(confidence * 100)}%)
-                </span>
-            </div>
-            );
-        })}
-       </div>
-    );
+    return null; // Let the video tag handle rendering
   };
 
   return (
-    <Card className="w-full h-full overflow-hidden shadow-lg border-none bg-transparent">
-      <CardContent className="p-0 h-full flex items-center justify-center">
+    <Card className="w-full h-full overflow-hidden shadow-lg border-none bg-transparent flex items-center justify-center">
+      <CardContent className="p-0 w-full h-full flex items-center justify-center">
+        {/* Render placeholder/loading/error content */}
         {renderContent()}
+        {/* Always render the video tag to attach the ref, hide if no permission or loading */}
+        <video
+          ref={videoRef}
+          className={`w-full h-full object-contain rounded-md ${hasPermission !== true || isLoading ? 'hidden' : ''}`} // Use object-contain, hide if no permission/loading
+          autoPlay
+          muted // Mute is often required for autoplay to work
+          playsInline // Important for mobile browsers
+        />
       </CardContent>
     </Card>
   );
