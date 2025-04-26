@@ -1,0 +1,56 @@
+services:
+  analytics:
+    build: ./analytics
+    ports:
+      - "8080:8080"
+      - "5005:5005/udp"
+    environment:
+      - MODEL_PATH=/app/yolov5s.pt
+      - DEEPSORT_MODEL_PATH=/app/deep_sort_weights/mars-small128.pb
+      - CONFIDENCE_THRESHOLD=0.5
+      - IOU_THRESHOLD=0.45
+      - JPEG_QUALITY=80
+      - PROCESS_EVERY_N_FRAMES=2
+      - API_URL=http://api:8000
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    runtime: nvidia
+    networks:
+      - vision-net
+    restart: unless-stopped
+
+  api:
+    build: ./api
+    ports:
+      - "8000:8000"
+    environment:
+      - ANALYTICS_URL=http://analytics:8080
+    networks:
+      - vision-net
+    depends_on:
+      - analytics
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./web-ui
+      dockerfile: Dockerfile
+      args:
+        REACT_APP_API_URL: http://localhost:8000
+        REACT_APP_WS_URL: ws://localhost:8080/ws
+    ports:
+      - "3000:80"  # наружу 3000, внутри 80 (nginx!)
+    networks:
+      - vision-net
+    depends_on:
+      - api
+    restart: unless-stopped
+
+networks:
+  vision-net:
+    driver: bridge
