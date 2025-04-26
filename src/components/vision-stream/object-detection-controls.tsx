@@ -7,28 +7,21 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-// import { Separator } from '@/components/ui/separator'; // Separator removed as AI section is gone
-// import { LoaderCircle, Lightbulb, AlertCircle } from 'lucide-react'; // Icons for AI section removed
-import { Filter, Info } from 'lucide-react';
-// import { Badge } from '@/components/ui/badge'; // Badge removed as suggestions are gone
+import { Filter, Info, LoaderCircle } from 'lucide-react';
+import type { CocoSSDClassLabel } from '@/types/detection'; // Use the specific type
 
 interface ObjectDetectionControlsProps {
-  availableClasses: string[];
+  availableClasses: CocoSSDClassLabel[]; // Use the specific type
   selectedClasses: string[];
   onFilterChange: (selected: string[]) => void;
-  // Removed AI props
-  // summary: string | null;
-  // suggestedFilters: string[];
-  // isSummaryLoading: boolean;
-  // isSuggestionLoading: boolean;
-  // aiError: string | null;
+  isModelLoading: boolean; // Add prop to indicate model loading state
 }
 
 export function ObjectDetectionControls({
   availableClasses,
   selectedClasses,
   onFilterChange,
-  // AI props removed
+  isModelLoading, // Use the prop
 }: ObjectDetectionControlsProps) {
   const handleCheckboxChange = (className: string, checked: boolean) => {
     const newSelectedClasses = checked
@@ -45,13 +38,6 @@ export function ObjectDetectionControls({
     onFilterChange([]);
   };
 
-   // applySuggestion removed as AI suggestions are gone
-  // const applySuggestion = (filter: string) => {
-  //   if (!selectedClasses.includes(filter)) {
-  //     onFilterChange([...selectedClasses, filter]);
-  //   }
-  // };
-
 
   return (
     <div className="space-y-4 p-2 group-data-[collapsible=icon]:hidden">
@@ -62,19 +48,23 @@ export function ObjectDetectionControls({
             Filter Detected Objects
           </CardTitle>
            <CardDescription className="text-xs text-sidebar-foreground/70 pt-1 flex items-center gap-1">
-             <Info className="w-3 h-3 shrink-0" /> Note: Object detection is not yet implemented. These are example classes.
+             <Info className="w-3 h-3 shrink-0" /> Select classes to display overlays for.
            </CardDescription>
         </CardHeader>
         <CardContent className="p-3 pt-0">
-          {availableClasses.length === 0 ? (
-            <p className="text-xs text-sidebar-foreground/70">No classes defined.</p> // Updated message
+          {isModelLoading ? (
+             <div className="flex items-center justify-center h-40 text-sidebar-foreground/70">
+                <LoaderCircle className="w-5 h-5 animate-spin mr-2"/> Loading classes...
+             </div>
+          ) : availableClasses.length === 0 ? (
+            <p className="text-xs text-sidebar-foreground/70">No classes available from model.</p>
           ) : (
             <>
             <div className="flex justify-between items-center mb-2">
                 <Button variant="link" size="sm" className="p-0 h-auto text-xs text-sidebar-accent hover:text-sidebar-accent/80" onClick={handleSelectAll}>Select All</Button>
                 <Button variant="link" size="sm" className="p-0 h-auto text-xs text-sidebar-foreground/70 hover:text-sidebar-accent/80" onClick={handleDeselectAll}>Deselect All</Button>
             </div>
-              <ScrollArea className="h-40 pr-3">
+              <ScrollArea className="h-48 pr-3"> {/* Increased height slightly */}
                 <div className="space-y-2">
                   {availableClasses.sort().map((className) => (
                     <div key={className} className="flex items-center space-x-2">
@@ -86,7 +76,7 @@ export function ObjectDetectionControls({
                       />
                       <Label
                         htmlFor={className}
-                        className="text-sm font-normal text-sidebar-foreground cursor-pointer"
+                        className="text-sm font-normal text-sidebar-foreground cursor-pointer capitalize" // Capitalize class names for display
                       >
                         {className}
                       </Label>
@@ -98,10 +88,6 @@ export function ObjectDetectionControls({
           )}
         </CardContent>
       </Card>
-
-      {/* AI Insights Card Removed */}
-      {/* <Separator className="bg-sidebar-border" /> */}
-      {/* <Card className="bg-sidebar-accent/10 border-sidebar-border"> ... </Card> */}
     </div>
   );
 }
